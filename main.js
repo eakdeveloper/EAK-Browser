@@ -1554,48 +1554,75 @@ app.whenReady().then(() => {
     initializeCSSFilters();
     setupAdBlocker();
 
-// 🔥 Naya Code: Auto Updater Setup Yahan Shamil Karen
+    // 🔥 UPDATER BLOCK: Download ke baad poochhne wala code shamil hai
     try {
-        autoUpdater.logger = require('electron-log'); // Logging ke liye
+        const log = require('electron-log'); 
+        autoUpdater.logger = log;
         autoUpdater.logger.transports.file.level = 'info';
-        
-        // Updates check karein
-        autoUpdater.checkForUpdatesAndNotify();
-        
-        // Zaruri Events (Optional, lekin behtar UX ke liye):
-        autoUpdater.on('update-downloaded', () => {
-             dialog.showMessageBox({
-                 type: 'info',
-                 title: 'Update Ready',
-                 message: 'Naya update download ho chuka hai. Application restart karne par install ho jayega.',
-                 buttons: ['Restart Now', 'Later']
-             }).then((result) => {
-                 if (result.response === 0) autoUpdater.quitAndInstall();
-             });
-        });
-    } catch(e) {
-        console.error("❌ Auto-Updater setup failed:", e);
-    }
-    // 🔥 End of New Code
 
+        console.log('--- AUTO-UPDATER SETUP STARTING ---');
+        log.info('App starting...');
+
+        // Updates check karein (Automatic Check)
+        autoUpdater.checkForUpdates(); 
+
+        // ❌ ERROR ALERT (Agar koi masla ho to screen par dikhega)
+        autoUpdater.on('error', (error) => {
+            log.error('Updater Error:', error.message);
+            console.error('❌ UPDATER ERROR:', error.message);
+            dialog.showMessageBox({
+                type: 'error',
+                title: 'Update Error',
+                message: 'Update check mein masla: ' + error.message,
+            });
+        });
+        
+        // 🔔 UPDATE AVAILABLE ALERT
+        autoUpdater.on('update-available', (info) => {
+            log.info('Update available. Version: ' + info.version);
+            console.log('✅ Update Found: ' + info.version);
+            dialog.showMessageBox({
+                type: 'info',
+                title: 'Update Available',
+                message: 'Naya version (' + info.version + ') background mein download shuru ho gaya hai.',
+            });
+        });
+
+        // ⬇️ DOWNLOAD COMPLETE (AB POOCHHEGA)
+        autoUpdater.on('update-downloaded', (info) => {
+            log.info('Update downloaded. Version: ' + info.version);
+            console.log('⬇️ Update Downloaded. Installing on Quit.');
+            
+            // 🔥 YAHAN POOCHHNE WALA DIALOG HAI
+            dialog.showMessageBox({
+                type: 'info',
+                title: 'Update Ready',
+                message: 'Naya update download ho chuka hai. Kya aap abhi restart karke install karna chahenge?',
+                buttons: ['Restart Now', 'Later'] // User se poochega
+            }).then((result) => {
+                // Agar user "Restart Now" dabaye
+                if (result.response === 0) autoUpdater.quitAndInstall(); 
+            });
+        });
+
+        autoUpdater.on('checking-for-update', () => {
+            log.info('Checking for update...');
+        });
+
+    } catch(e) {
+        console.error("❌ Auto-Updater setup failed (Catch Block):", e);
+        // ERROR KO SCREEN PAR DIKHAEN
+        dialog.showMessageBox({
+            type: 'error',
+            title: 'Updater Error',
+            message: 'Auto-Updater shuru nahi ho saka: ' + e.message,
+        });
+    }
+    // 🔥 End of UPDATER BLOCK
+
+   
     createWindow();
     console.log('✅ App initialization completed');
-});
-
-app.on('window-all-closed', () => {
-    console.log('🪟 All windows closed');
-    if (process.platform !== 'darwin') {
-        console.log('🛑 Quitting app (non-macOS platform)');
-        app.quit();
-    }
-});
-
-app.on('activate', () => {
-    console.log('🔵 App activate event');
-    if (BrowserWindow.getAllWindows().length === 0) {
-        console.log('🪟 No windows found, creating new window');
-        createWindow();
-    }
 });
 
 app.on('ready', () => {
