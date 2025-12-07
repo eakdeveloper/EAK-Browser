@@ -1,0 +1,101 @@
+{
+  "name": "myadvancedbrowser",
+  "version": "1.0.1",
+  "main": "main.js",
+  "description": "Advanced Electron Browser with YouTube Downloader, PiP TV, AdBlock & More",
+  "author": "EAK Developer",
+  "license": "ISC",
+  "keywords": [
+    "electron",
+    "browser",
+    "youtube-downloader",
+    "adblock",
+    "pip-player"
+  ],
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --enable-logging",
+    "dist": "electron-builder --win --x64",
+    "dist:dir": "electron-builder --win --dir",
+    "clean": "rimraf release dist"
+  },
+  "build": {
+    "appId": "com.eakdeveloper.myadvancedbrowser",
+    "productName": "EAK Browser",
+    "asar": false,
+    "asarUnpack": [
+      "yt-dlp/**",
+      "ffmpeg/**"
+    ],
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "**/*",
+      "!release",
+      "!dist"
+    ],
+    "extraResources": [
+      {
+        "from": "yt-dlp",
+        "to": "yt-dlp",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": "ffmpeg",
+        "to": "ffmpeg",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ],
+
+    "publish": {
+      "provider": "github",
+      "owner": "eakdeveloper",
+      "repo": "EAK-Browser"
+    },
+
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "perMachine": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "EAK Browser"
+    }
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.1",
+    "electron": "^39.2.3",
+    "electron-builder": "^26.0.12",
+    "electron-reloader": "^1.2.3",
+    "rimraf": "^6.0.1"
+  },
+  "dependencies": {
+    "@ffmpeg-installer/ffmpeg": "^1.1.0",
+    "cross-fetch": "^4.1.0",
+    "electron-updater": "^6.6.2",
+    "ffmpeg-static": "^5.3.0",
+    "fluent-ffmpeg": "^2.1.3",
+    "node-downloader-helper": "^2.1.9",
+    "video.js": "^8.23.4",
+    "videojs-contrib-hls": "^5.15.0",
+    "youtube-dl-exec": "^3.0.27",
+    "ytdl-core": "^4.11.5"
+  }
+}

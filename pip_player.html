@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>TV Player (PiP)</title>
+    
+    <link href="./assets/video-js.min.css" rel="stylesheet">
+    
+    <style>
+        /* CSS to make the video player fill the entire window */
+        html, body {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            overflow: hidden;
+            background-color: #1e1e1e;
+            color: white; /* Text color for the new UI elements */
+        }
+        .video-js {
+            width: 100%;
+            height: 100%;
+        }
+        /* Video Player ko full screen banana */
+        #pip-player,
+        .video-js .vjs-tech {
+            top: 0; left: 0; right: 0; bottom: 0;
+            width: 100% !important;
+            height: 100% !important;
+            object-fit: fill !important;
+            position: absolute;
+        }
+
+        /* --- New: Channel Info Overlay --- */
+        #channel-info {
+            position: absolute;
+            top: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.7);
+            padding: 5px 15px;
+            border-radius: 5px;
+            font-size: 16px;
+            font-weight: bold;
+            color: white;
+            z-index: 100;
+            opacity: 0;
+            transition: opacity 0.5s ease;
+            pointer-events: none;
+        }
+        #channel-info.visible {
+            opacity: 1;
+        }
+
+        /* --- PIP Playlist Panel Styling --- */
+        #pip-playlist-panel {
+            position: absolute;
+            top: 0;
+            right: 0;
+            width: 300px;
+            height: 100%;
+            background-color: rgba(34, 34, 34, 0.95);
+            color: white;
+            z-index: 200;
+            display: flex;
+            flex-direction: column;
+            border-left: 1px solid #444;
+            transition: transform 0.3s ease;
+        }
+
+        #pip-playlist-panel.hidden {
+            transform: translateX(100%);
+            box-shadow: none;
+        }
+        
+        #pip-playlist-panel.visible {
+            transform: translateX(0);
+            box-shadow: -5px 0 10px rgba(0, 0, 0, 0.5);
+        }
+
+        #pip-playlist-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px;
+            background-color: #333;
+            flex-shrink: 0;
+        }
+
+        #pip-playlist-header h3 {
+            margin: 0;
+            font-size: 16px;
+        }
+
+        #pip-hide-playlist-btn {
+            background: none;
+            border: none;
+            color: white;
+            font-size: 18px;
+            cursor: pointer;
+            padding: 0 5px;
+            line-height: 1;
+        }
+        
+        #pip-hide-playlist-btn:hover {
+            color: #ddd;
+        }
+
+        #pip-channel-list {
+            list-style-type: none;
+            padding: 0;
+            margin: 0;
+            overflow-y: auto;
+            flex-grow: 1;
+        }
+
+        .pip-channel-item {
+            padding: 10px;
+            cursor: pointer;
+            border-bottom: 1px solid #333;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            font-size: 14px;
+            transition: background-color 0.1s;
+        }
+
+        .pip-channel-item:hover {
+            background-color: #444;
+        }
+        
+        /* Currently playing channel */
+        .pip-channel-item.active {
+            background-color: #007bff;
+            font-weight: bold;
+        }
+        
+        /* Keyboard selected channel */
+        .pip-channel-item.selected {
+            background-color: #ff9900; /* Orange highlight for selection */
+            color: black;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div id="channel-info"></div>
+
+    <video id="pip-player" 
+           class="video-js vjs-default-skin vjs-fill" 
+           controls 
+           autoplay 
+           preload="auto">
+    </video>
+
+    <div id="pip-playlist-panel" class="hidden">
+        <div id="pip-playlist-header">
+            <h3>Channels List</h3>
+            <button id="pip-hide-playlist-btn" title="Hide Playlist">X</button>
+        </div>
+        <ul id="pip-channel-list">
+            </ul>
+    </div>
+
+    <script src="./assets/video.min.js"></script> 
+    
+    <script>
+        const { ipcRenderer } = require('electron');
+        
+        // Global variables for playlist management
+        let currentPlaylist = [];
+        let currentChannelIndex = -1;
+        // NEW: Ab hum selection ko bhi track karenge (keyboard navigation ke liye)
+        let currentSelectionIndex = -1;
+        
+        const channelInfoDiv = document.getElementById('channel-info');
+        
+        // Playlist Elements
+        const pipPlaylistPanel = document.getElementById('pip-playlist-panel');
+        const pipChannelList = document.getElementById('pip-channel-list');
+        const pipHidePlaylistBtn = document.getElementById('pip-hide-playlist-btn');
+        
+        console.log("📺 [PIP-PLAYER] Script loading...");
+        
+        // videojs ko initialize karein
+        const player = videojs('pip-player');
+        
+        player.on('loadedmetadata', function() {
+            console.log("📺 [PIP-PLAYER] Video metadata loaded.");
+            player.play().catch(e => {
+                console.error("❌ [PIP-PLAYER] Auto-play failed:", e.message);
+            });
+        });
+
+        // --------------------------------------------------------------------------
+        // Helper Functions
+        // --------------------------------------------------------------------------
+
+        function togglePlaylistPanel() {
+            const isHidden = pipPlaylistPanel.classList.toggle('hidden');
+            pipPlaylistPanel.classList.toggle('visible');
+            
+            // Jab playlist dikhe to selection ko current playing channel par set karo
+            if (!isHidden && currentPlaylist.length > 0) {
+                 // Ye ensure karega ke selection us item par jaye jo already active hai
+                updateSelectionHighlight(currentChannelIndex);
+            }
+        }
+        pipHidePlaylistBtn.addEventListener('click', togglePlaylistPanel);
+
+
+        function showChannelName(name) {
+            channelInfoDiv.textContent = name;
+            channelInfoDiv.classList.add('visible');
+            clearTimeout(window.channelInfoTimeout);
+            window.channelInfoTimeout = setTimeout(() => {
+                channelInfoDiv.classList.remove('visible');
+            }, 3000); // 3 seconds tak dikhega
+        }
+
+        // NEW: Selection highlight ko manage karne ka naya function
+        function updateSelectionHighlight(newIndex) {
+            // Purana selection hatao
+            document.querySelectorAll('.pip-channel-item.selected').forEach(el => {
+                el.classList.remove('selected');
+            });
+
+            // Naya selection lagao
+            const selectedItem = document.querySelector(`.pip-channel-item[data-index="${newIndex}"]`);
+            if (selectedItem) {
+                selectedItem.classList.add('selected');
+                selectedItem.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                currentSelectionIndex = newIndex; // Index ko update karo
+            }
+        }
+        
+        function loadChannel(index) {
+            if (!currentPlaylist || currentPlaylist.length === 0) {
+                console.warn("⚠️ No playlist is loaded.");
+                return;
+            }
+            
+            // Index ko boundary mein rakhein
+            const totalChannels = currentPlaylist.length;
+            if (index < 0) {
+                index = totalChannels - 1; // Last channel
+            } else if (index >= totalChannels) {
+                index = 0; // First channel
+            }
+            
+            currentChannelIndex = index;
+            const channel = currentPlaylist[index];
+            const url = channel.url.trim();
+            const name = channel.name;
+
+            console.log(`📺 [PIP-PLAYER] Loading channel ${index}: ${name}, URL: ${url}`);
+            
+            // Active (playing) channel ko highlight karo
+            document.querySelectorAll('.pip-channel-item').forEach(el => {
+                el.classList.remove('active');
+            });
+            const activeItem = document.querySelector(`.pip-channel-item[data-index="${currentChannelIndex}"]`);
+            if (activeItem) {
+                activeItem.classList.add('active');
+                // Active hone ke baad, selection ko bhi yahan le aao
+                updateSelectionHighlight(currentChannelIndex);
+            }
+            
+            showChannelName(name);
+
+            const type = url.toLowerCase().endsWith('.m3u8') ? 'application/x-mpegURL' : 'video/mp4';
+            
+            // Player ko naya source dein
+            player.src({ type: type, src: url });
+            
+            // Auto-play koshish karein
+            player.play().catch(e => {
+                 console.error("❌ [PIP-PLAYER] Auto-play failed on load:", e.message);
+            });
+        }
+        
+        function loadNextChannel() {
+            if (currentPlaylist.length > 0) {
+                loadChannel(currentChannelIndex + 1);
+            }
+        }
+
+        function loadPreviousChannel() {
+            if (currentPlaylist.length > 0) {
+                loadChannel(currentChannelIndex - 1);
+            }
+        }
+        
+        // Playlist ko UI mein dikhana
+        function renderPlaylist() {
+            pipChannelList.innerHTML = '';
+            
+            if (!currentPlaylist || currentPlaylist.length === 0) {
+                pipChannelList.innerHTML = '<li class="pip-channel-item">No channels available.</li>';
+                return;
+            }
+            
+            // Initial selection ko current channel par set karein
+            currentSelectionIndex = currentChannelIndex;
+
+            currentPlaylist.forEach((channel, index) => {
+                const li = document.createElement('li');
+                li.className = 'pip-channel-item';
+                li.textContent = channel.name;
+                li.dataset.index = index;
+                
+                if (index === currentChannelIndex) {
+                    li.classList.add('active');
+                    li.classList.add('selected'); // Initial selection bhi active channel par
+                }
+
+                // Click handler
+                li.addEventListener('click', () => {
+                    loadChannel(index);
+                });
+                
+                pipChannelList.appendChild(li);
+            });
+            
+            console.log("📺 [PIP-PLAYER] Playlist rendered successfully.");
+            // Playlist ko dikhao
+            togglePlaylistPanel();
+        }
+
+
+        // --------------------------------------------------------------------------
+        // IPC Listener: Main process se data receive karna
+        // --------------------------------------------------------------------------
+        
+        ipcRenderer.on('load-pip-video', (event, data) => {
+            const { url, playlist } = data;
+            console.log(`📺 [PIP-PLAYER] Received URL: ${url}`);
+            
+            if (playlist && Array.isArray(playlist) && playlist.length > 0) {
+                currentPlaylist = playlist;
+                
+                const index = currentPlaylist.findIndex(ch => ch.url.trim() === url.trim());
+                if (index !== -1) {
+                    currentChannelIndex = index;
+                } else {
+                    currentChannelIndex = 0;
+                }
+                
+                loadChannel(currentChannelIndex);
+                renderPlaylist(); // Playlist ko load aur render karo
+                
+            } else {
+                // Agar playlist nahi hai to sirf URL load karein
+                currentPlaylist = [];
+                currentChannelIndex = -1;
+                currentSelectionIndex = -1;
+                const type = url.toLowerCase().endsWith('.m3u8') ? 'application/x-mpegURL' : 'video/mp4';
+                player.src({ type: type, src: url });
+                player.play().catch(e => {
+                     console.error("❌ [PIP-PLAYER] Auto-play failed on single URL load:", e.message);
+                });
+                showChannelName("Video Player");
+                
+                // Single video par playlist panel chupana
+                pipPlaylistPanel.classList.remove('visible');
+                pipPlaylistPanel.classList.add('hidden');
+            }
+        });
+
+        
+        // --------------------------------------------------------------------------
+        // Keyboard Shortcuts (N/P, Volume, Seek, L for Playlist, Arrows/Enter for List)
+        // --------------------------------------------------------------------------
+
+        document.addEventListener('keydown', (e) => {
+            // Ensure focus is not on an input field
+            if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
+                return;
+            }
+
+            const isPlaylistVisible = pipPlaylistPanel.classList.contains('visible');
+            const totalChannels = currentPlaylist.length;
+            
+            // 1. Playlist Navigation (Priority when list is visible)
+            if (isPlaylistVisible && totalChannels > 0) {
+                
+                if (e.key === 'ArrowUp' || e.key === 'ArrowDown' || e.key === 'Enter') {
+                    e.preventDefault(); // Volume/Seek/Browser scroll ko roko
+                    
+                    if (e.key === 'ArrowUp') {
+                        let newIndex = currentSelectionIndex - 1;
+                        if (newIndex < 0) newIndex = totalChannels - 1;
+                        updateSelectionHighlight(newIndex);
+                    } 
+                    
+                    else if (e.key === 'ArrowDown') {
+                        let newIndex = currentSelectionIndex + 1;
+                        if (newIndex >= totalChannels) newIndex = 0;
+                        updateSelectionHighlight(newIndex);
+                    } 
+                    
+                    else if (e.key === 'Enter') {
+                        if (currentSelectionIndex !== -1) {
+                            console.log(`🎹 Enter pressed, loading channel ${currentSelectionIndex}`);
+                            loadChannel(currentSelectionIndex);
+                        }
+                    }
+                    return; // Playlist keys handled, exit
+                }
+            }
+
+            // 2. Channel Control (N for Next, P for Previous)
+            if (totalChannels > 0) {
+                if (e.key === 'n' || e.key === 'N') {
+                    console.log("🎹 Next Channel (N) pressed");
+                    loadNextChannel();
+                    e.preventDefault();
+                } else if (e.key === 'p' || e.key === 'P') {
+                    console.log("🎹 Previous Channel (P) pressed");
+                    loadPreviousChannel();
+                    e.preventDefault();
+                }
+            }
+
+            // 3. Toggle Playlist (L)
+            if (e.key === 'l' || e.key === 'L') {
+                 if (totalChannels > 0) {
+                     togglePlaylistPanel();
+                     console.log("🎹 Toggle Playlist (L) pressed");
+                 }
+                 e.preventDefault();
+            }
+            
+            // 4. Volume and Seek (Only handle if playlist is NOT visible or the key was not handled above)
+            if (!isPlaylistVisible) {
+                
+                // Volume Control (Up/Down Arrows, +/- keys)
+                const currentVolume = player.volume();
+                if (e.key === '+' || e.key === '=') { // Up/Down Arrows already handled by playlist if visible
+                    player.volume(Math.min(1.0, currentVolume + 0.1));
+                    console.log(`🔊 Volume Up: ${player.volume().toFixed(1)}`);
+                    e.preventDefault(); 
+                } else if (e.key === '-') {
+                    player.volume(Math.max(0.0, currentVolume - 0.1));
+                    console.log(`🔇 Volume Down: ${player.volume().toFixed(1)}`);
+                    e.preventDefault(); 
+                } else if (e.key === 'ArrowUp') {
+                     // For convenience, if list is hidden, arrows still work for volume
+                    player.volume(Math.min(1.0, currentVolume + 0.1));
+                    e.preventDefault(); 
+                } else if (e.key === 'ArrowDown') {
+                    player.volume(Math.max(0.0, currentVolume - 0.1));
+                    e.preventDefault(); 
+                }
+                
+                // Seek Control (Forward/Backward: Left/Right Arrows)
+                const seekTime = 5; // 5 seconds jump
+                if (e.key === 'ArrowRight') {
+                    player.currentTime(player.currentTime() + seekTime);
+                    console.log(`⏩ Forward ${seekTime}s`);
+                    e.preventDefault(); 
+                } else if (e.key === 'ArrowLeft') {
+                    player.currentTime(player.currentTime() - seekTime);
+                    console.log(`⏪ Backward ${seekTime}s`);
+                    e.preventDefault(); 
+                }
+            }
+        });
+
+        console.log("✅ [PIP-PLAYER] videojs player initialized.");
+        
+    </script>
+</body>
+</html>

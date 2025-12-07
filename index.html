@@ -1,0 +1,780 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Advanced Electron Browser</title>
+
+    <link href="./assets/video-js.min.css" rel="stylesheet">
+    
+   <style>
+/* --- Tab Bar Styling --- */
+    #tab-bar {
+        height: 35px; 
+        background-color: #1e1e1e; 
+        display: flex; /* Tabs aur buttons ko line mein laane ke liye */
+        align-items: center; /* Vertically center karne ke liye */
+        padding-left: 5px;
+        z-index: 10;
+        overflow-x: auto;
+        white-space: nowrap;
+        border-bottom: 1px solid #333;
+    }
+    
+    /* 🔥 NEW: Logo ko right side mein push karne ke liye */
+    #tab-bar #browser-logo {
+        margin-left: auto; /* Isse pehle ke saare items left par aur yeh right par chala jayega */
+        width: 24px;
+        height: 24px;
+        padding-right: 10px; /* Thoda fasla right edge se */
+        cursor: default;
+    }
+    
+    /* Agar aap tabs ko bhi flex item banana chahte hain */
+    .tab {
+        /* ... existing tab styles ... */
+    }
+
+
+    /* Basic Resets */
+    body, html {
+        margin: 0;
+        padding: 0;
+        height: 100vh; 
+        overflow: hidden; 
+        font-family: Arial, sans-serif;
+        background-color: #1e1e1e; /* Dark background for modern look */
+    }
+
+    /* Flexbox Container */
+    #main-container {
+        display: flex;
+        flex-direction: column; 
+        height: 100vh;
+        width: 100%;
+    }
+
+    /* --- Tab Bar Styling --- */
+    #tab-bar {
+        height: 35px; 
+        background-color: #1e1e1e; /* Darker tab bar */
+        display: flex;
+        align-items: center;
+        padding-left: 5px;
+        z-index: 10;
+        overflow-x: auto;
+        white-space: nowrap;
+        border-bottom: 1px solid #333;
+    }
+
+    .tab {
+        display: flex;
+        align-items: center;
+        padding: 5px 15px;
+        background-color: #333;
+        color: white;
+        border-radius: 5px 5px 0 0;
+        margin-right: 2px;
+        cursor: pointer;
+        font-size: 13px;
+        position: relative;
+        user-select: none;
+        transition: background-color 0.2s;
+        max-width: 180px; 
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        min-width: 100px;
+    }
+
+    .tab.active {
+        background-color: #444; /* Active tab is slightly lighter */
+        color: #fff;
+    }
+
+    .tab:hover {
+        background-color: #555;
+    }
+
+    .close-tab {
+        margin-left: 10px;
+        font-weight: bold;
+        color: #ccc;
+        line-height: 1;
+        padding: 0 2px;
+    }
+
+    .close-tab:hover {
+        color: #f00; /* Red hover for close button */
+    }
+
+    #new-tab-btn {
+        background-color: #555;
+        color: white;
+        border: none;
+        border-radius: 3px;
+        padding: 3px 10px;
+        margin-left: 10px;
+        cursor: pointer;
+        line-height: 1; 
+        flex-shrink: 0;
+        /* Updated style for consistency */
+        font-size: 16px;
+        transition: background-color 0.2s;
+        min-width: 30px; /* Thoda chota kiya */
+    }
+
+    #new-tab-btn:hover {
+        background-color: #777;
+    }
+    /* --- END: Tab Bar Styling --- */
+
+
+    /* --- Toolbar Styling (Updated) --- */
+    #toolbar {
+        height: 40px; 
+        background-color: #3a3a3a; /* Darker, modern toolbar */
+        color: white;
+        display: flex;
+        align-items: center;
+        padding: 0 8px; /* Padding kam kiya */
+        z-index: 1000; 
+        border-bottom: 1px solid #222;
+        gap: 5px; /* Elements ke beech mein gap */
+    }
+    
+    #address-bar {
+        flex-grow: 1;
+        margin: 0; /* Margin remove kiya, flex gap se manage hoga */
+        padding: 5px 10px;
+        border: none;
+        border-radius: 4px; /* Thoda rounder */
+        background-color: #555;
+        color: white;
+        outline: none;
+        min-width: 100px; /* Minimum width set kiya */
+    }
+    
+    /* Toolbar Buttons (Updated) */
+    #toolbar button {
+        /* Default for all toolbar buttons */
+        padding: 6px 12px; /* Uniform padding */
+        border: none;
+        border-radius: 4px; /* Uniform border-radius */
+        cursor: pointer;
+        background-color: #505050; /* Darker button color */
+        color: white;
+        transition: background-color 0.2s, transform 0.1s;
+        line-height: 1.2; 
+        flex-shrink: 0; /* **Most Important Change**: Ensures button doesn't shrink */
+        font-weight: 600;
+    }
+
+    /* Smaller Buttons (Back, Forward, Go) */
+    #back-btn, #forward-btn, #go-btn {
+        padding: 6px 8px; /* Smaller padding for icon buttons */
+        font-size: 18px; /* Larger font for icons */
+        min-width: 30px; /* Fixed width for better look */
+        text-align: center;
+    }
+
+    /* Local File Button (Icon-focused style) */
+    #local-file-btn {
+        padding: 6px 10px;
+        font-size: 13px;
+    }
+    #local-file-btn::before {
+        content: "📂 "; /* Icon ke liye content add kiya */
+        margin-right: 3px;
+    }
+    #local-file-btn {
+        /* Text only rakha, content tag ka use nahi kiya kyonki HTML mein already hai */
+        padding: 6px 10px;
+        font-size: 13px;
+        background-color: #3c82b8; /* Blue-ish color */
+    }
+    #local-file-btn:hover:enabled {
+        background-color: #4a91cc;
+    }
+
+    #toolbar button:hover:enabled {
+        background-color: #6a6a6a;
+        transform: translateY(-1px); /* Slight lift on hover */
+    }
+    #toolbar button:disabled {
+         opacity: 0.4;
+         cursor: not-allowed;
+         transform: none;
+    }
+    
+    /* Ad Blocker Button States */
+    #adblock-toggle.adblock-enabled {
+        background-color: #28a745; /* Green */
+        font-weight: bold;
+    }
+    #adblock-toggle.adblock-disabled {
+        background-color: #dc3545; /* Red */
+        font-weight: bold;
+    }
+
+    /* --- END: Toolbar Styling --- */
+
+
+    /* Content Area: Webview, Media Player aur Playlist */
+    .content-area {
+        flex-grow: 1; 
+        position: relative; 
+        overflow: hidden; 
+        background-color: #212121; /* Dark background for webview area */
+    }
+    
+    /* Webview Styling */
+    webview {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        display: none; 
+    }
+
+           
+            
+    /* Playlist Panel Styling */
+    #playlist-panel {
+        width: 0; 
+        min-width: 0;
+        overflow-x: hidden;
+        background-color: #222;
+        color: white;
+        transition: width 0.3s ease; 
+        height: 100%; 
+        position: absolute; 
+        right: 0;
+        top: 0;
+        display: flex;
+        flex-direction: column;
+        z-index: 10;
+        border-left: 1px solid #444;
+    }
+    
+    /* Jab panel dikh raha ho */
+    #playlist-panel.visible {
+        width: 300px; 
+        min-width: 300px;
+    }
+    
+    /* Playlist Header/Close Button */
+    #playlist-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 10px;
+        background-color: #333;
+    }
+    #hide-playlist-btn {
+        background: none;
+        border: none;
+        color: white;
+        font-size: 18px;
+        cursor: pointer;
+    }
+
+    /* Channel List */
+    #channel-list {
+        list-style-type: none;
+        padding: 0;
+        margin: 0;
+        overflow-y: auto;
+        flex-grow: 1;
+    }
+    .channel-item {
+        padding: 10px;
+        cursor: pointer;
+        border-bottom: 1px solid #333;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    .channel-item:hover {
+        background-color: #444;
+    }
+    .channel-item.active {
+        background-color: #007bff;
+        color: white;
+    }
+
+    /* Notification Area Styling */
+    #notification-area {
+        position: fixed; 
+        bottom: 20px; 
+        right: 20px; 
+        padding: 10px 15px; 
+        background-color: rgba(0, 0, 0, 0.8); 
+        color: white; 
+        border-radius: 5px; 
+        z-index: 999; 
+        display: none; 
+        font-weight: bold;
+    }
+
+   
+
+    /* === CHANNELS BUTTON STYLING === */
+    #toggle-playlist-btn {
+        margin-left: 0; /* Margin remove kiya */
+        padding: 6px 12px;
+        background-color: #0066cc;
+        color: white;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 13px;
+        font-weight: bold;
+        flex-shrink: 0;
+    }
+
+    #toggle-playlist-btn:hover {
+        background-color: #0088ff;
+    }
+
+    /* ---------------------------------------------------- */
+    /* === DOWNLOAD POPUP AND ITEM STYLING (NEW/IMPROVED) === */
+    /* ---------------------------------------------------- */
+    #download-popup {
+        position: fixed; 
+        bottom: 20px; /* Neeche se 20 pixels upar */
+        left: 20px;   /* Left side se 20 pixels andar */
+        z-index: 1000; 
+        width: 380px; /* Slightly wider */
+        max-height: 400px; 
+        background: #2b2b2b; /* Dark background */
+        border: 1px solid #555; 
+        box-shadow: 0 8px 16px rgba(0,0,0,0.4); 
+        overflow-y: auto; 
+        padding: 15px;
+        border-radius: 5px;
+        color: #ddd;
+    }
+
+    #download-popup h3 {
+        margin-top: 0;
+        color: white;
+        border-bottom: 1px solid #555;
+        padding-bottom: 5px;
+        margin-bottom: 10px;
+    }
+
+    .download-item {
+        border: 1px solid #444;
+        padding: 10px;
+        margin-bottom: 10px;
+        border-radius: 4px;
+        background-color: #383838;
+    }
+
+    .download-title {
+        font-weight: bold;
+        color: #fff;
+        margin-bottom: 5px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .download-progress-text {
+        display: flex;
+        justify-content: space-between;
+        font-size: 0.9em;
+        color: #ccc;
+        margin-bottom: 5px;
+    }
+    
+    .progress-container {
+        background-color: #555;
+        border-radius: 2px;
+        margin: 5px 0;
+        height: 8px; /* Slightly thinner */
+    }
+    
+    .download-progress-bar {
+        height: 100%;
+        background-color: #007bff; /* Blue progress bar */
+        transition: width 0.3s;
+        border-radius: 2px;
+    }
+
+    .download-status {
+        font-weight: bold;
+        font-size: 0.9em;
+        margin-top: 5px;
+    }
+
+    .status-complete { color: #28a745; }
+    .status-error { color: #dc3545; }
+    .status-paused { color: #ffc107; }
+    .status-downloading { color: #007bff; }
+    .status-cancelled { color: #888; }
+
+
+    .download-actions button {
+        margin-top: 8px;
+        margin-right: 5px;
+        padding: 5px 10px;
+        cursor: pointer;
+        background-color: #555;
+        color: white;
+        border: none;
+        border-radius: 3px;
+        transition: background-color 0.2s;
+    }
+    .download-actions button:hover {
+        background-color: #777;
+    }
+    /* ---------------------------------------------------- */
+
+    .video-download-button {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        z-index: 1000;
+        padding: 8px 16px;
+        background-color: #ff0000;
+        color: white;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        transition: background-color 0.2s;
+    }
+
+    .video-download-button:hover {
+        background-color: #cc0000;
+    }
+
+
+    /* --- Media Download Button Styling (Add this to your style.css) --- */
+    #media-download-container {
+        /* Position: absolute takay yeh video player ke ooper dikhe */
+        position: absolute; 
+        top: 5px; 
+        right: 180px; /* Address bar button se thoda faasle par */
+        z-index: 999; 
+        display: none; /* By default hidden rakhein */
+        background: rgba(0, 0, 0, 0.6);
+        padding: 3px 5px;
+        border-radius: 5px;
+        transition: opacity 0.3s;
+    }
+
+    #media-download-container.active {
+        display: block; /* Jab 'active' class renderer.js se add ho to dikhayein */
+    }
+
+    #download-media-btn {
+        background-color: #f44336; /* Attractive Red color */
+        color: white;
+        border: none;
+        padding: 6px 12px;
+        cursor: pointer;
+        font-size: 13px;
+        border-radius: 4px;
+        font-weight: bold;
+    }
+
+    #download-media-btn:hover {
+        background-color: #d32f2f;
+    }
+
+    /* --- DOWNLOAD SELECTION MODAL STYLING (Naya Code) --- */
+    #download-modal {
+        position: fixed;
+        top: 0; left: 0; right: 0; bottom: 0;
+        background: rgba(0, 0, 0, 0.8); /* Darker overlay */
+        display: none; /* Default mein hidden rahega */
+        justify-content: center;
+        align-items: center;
+        z-index: 2000; /* Sabse ooper rakhein */
+    }
+
+    #download-modal .modal-content {
+        background: #444; /* Darker content box */
+        padding: 30px;
+        border-radius: 8px;
+        text-align: center;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.7);
+        position: relative;
+        color: white;
+    }
+
+    #modal-title-display {
+        font-size: 14px;
+        color: #ccc;
+        margin-bottom: 20px;
+        font-style: italic;
+        max-width: 400px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    #download-modal button {
+        padding: 10px 20px;
+        margin: 10px 5px;
+        border: none;
+        border-radius: 5px;
+        cursor: pointer;
+        font-weight: bold;
+        transition: background-color 0.2s;
+    }
+
+    #download-video-btn {
+        background-color: #007bff; /* Blue */
+        color: white;
+    }
+    #download-video-btn:hover {
+        background-color: #0056b3;
+    }
+
+    #download-audio-btn {
+        background-color: #28a745; /* Green */
+        color: white;
+    }
+    #download-audio-btn:hover {
+        background-color: #1e7e34;
+    }
+
+    #close-modal-btn {
+        position: absolute;
+        top: 10px; right: 10px;
+        background: none;
+        border: none;
+        font-size: 24px;
+        cursor: pointer;
+        color: #aaa;
+        line-height: 1;
+        padding: 0;
+        margin: 0;
+    }
+    #close-modal-btn:hover {
+        color: #fff;
+    }
+
+/* Bookmark toggle button in address bar */
+#bookmark-toggle-btn {
+    font-size: 18px;
+    padding: 5px 8px;
+    line-height: 1;
+    
+    /* 🔥 NEW: Default Star Color (Jub Bookmark Na Ho) */
+    color: #ccc; /* Thoda halka grey */
+}
+
+/* History & Bookmarks List Styles */
+.history-item, .bookmark-item {
+    background-color: #444;
+    color: white;
+    padding: 10px;
+    margin-bottom: 5px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background-color 0.2s;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.history-item:hover, .bookmark-item:hover {
+    background-color: #555;
+}
+
+.item-title {
+    font-weight: bold;
+    flex-basis: 40%;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.item-url {
+    font-size: 0.8em;
+    color: #ccc;
+    flex-basis: 40%;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-left: 10px;
+}
+
+.item-time {
+    font-size: 0.7em;
+    color: #999;
+    flex-basis: 20%;
+    text-align: right;
+}
+
+/* Bookmark remove button */
+.remove-bookmark-btn {
+    background-color: #f00;
+    color: white;
+    border: none;
+    border-radius: 50%;
+    width: 20px;
+    height: 20px;
+    font-size: 12px;
+    cursor: pointer;
+    margin-left: 10px;
+    line-height: 1;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+#refresh-btn {
+    padding: 6px 10px;
+    font-size: 18px;
+    min-width: 36px;
+    background-color: #505050;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+#refresh-btn:hover {
+    background-color: #777;
+}
+
+</style>
+</head>
+<body>
+    <div id="main-container">
+        
+        <div id="tab-bar">
+            <button id="new-tab-btn" title="Open New Tab">➕</button>
+<img id="browser-logo" src="./assets/logo-static.png" alt="Browser Logo">
+        </div>
+
+        <div id="toolbar">
+            <button id="back-btn">←</button>
+            <button id="forward-btn">→</button>
+<button id="refresh-btn" title="Reload current page">Refresh</button>
+            <input type="text" id="address-bar" placeholder="Enter URL or Search Term...">
+            <button id="go-btn">Go</button>
+<button id="bookmark-toggle-btn" class="toolbar-btn" title="Add/Remove Bookmark">⭐</button>
+<button id="history-btn" class="toolbar-btn" title="View History">📜 History / Bookmarks</button>
+            <button id="download-toggle-btn">Downloads (0)</button>
+            <button id="local-file-btn" style="margin-left: 10px;"> Local Video/TV</button>
+	 	    <button id="toggle-playlist-btn" title="Show/Hide Channels">Channels</button>
+
+
+            <button id="adblock-toggle" style="margin-left: 10px;"></button>
+        </div>
+
+        <div id="media-download-container">
+    <button id="download-media-btn" title="Download current playing media">
+        ⬇️ Media Download
+    </button>
+</div>
+
+<div id="download-popup" style="display: none;">
+    <h3>Active Downloads</h3>
+    <div id="downloads-container">
+        <p id="no-downloads-msg">No active downloads.</p>
+    </div>
+</div>
+        <div class="content-area">
+            
+            <div id="media-player-container">
+                <video id="video-player" 
+                        class="video-js vjs-default-skin vjs-fill" 
+                        controls 
+                        preload="auto" 
+                        data-setup='{}'
+                        tabindex="0"> 
+                </video>
+            </div>
+            
+            <div id="playlist-panel">
+                <div id="playlist-header">
+                    <h3>Channels</h3>
+                    <button id="hide-playlist-btn" title="Hide/Show Playlist">✕</button>
+                </div>
+                <ul id="channel-list">
+                    </ul>
+            </div>
+        </div>
+    </div>
+
+    <div id="notification-area">
+        Notification will appear here.
+    </div>
+
+    <script src="./assets/video.min.js"></script>
+<div id="download-modal">
+    <div class="modal-content">
+        <h3 style="margin-top: 0; color: white;">Download Format Select Karein</h3>
+        <p id="modal-title-display">Video Title will appear here...</p>
+        
+        <button id="download-video-btn">🎬 Video Download (MP4)</button>
+
+        <button id="download-audio-btn">🎶 Audio Download (MP3)</button>
+        
+        <button id="close-modal-btn">&times;</button>
+    </div>
+</div>
+
+
+<div id="history-bookmarks-modal" style="
+    display: none; 
+    position: fixed; 
+    top: 0; left: 0; 
+    width: 100%; height: 100%; 
+    background-color: rgba(0,0,0,0.8); 
+    z-index: 2000; 
+    justify-content: center; 
+    align-items: center;
+">
+    <div style="
+        background-color: #3a3a3a; 
+        padding: 20px; 
+        border-radius: 8px; 
+        width: 80%; 
+        max-width: 700px; 
+        height: 80%;
+        display: flex; 
+        flex-direction: column;
+    ">
+        <h2 style="color: white; margin-top: 0;">History & Bookmarks</h2>
+        <button id="close-history-modal-btn" style="position: absolute; top: 15px; right: 20px; background: none; border: none; font-size: 30px; color: white; cursor: pointer;">&times;</button>
+
+        <div style="flex: 1; overflow-y: auto; padding-right: 15px;">
+            <h3 style="color: #bbb;">History (Recent)</h3>
+            <ul id="history-list" style="list-style: none; padding: 0;">
+                <p style="color:#ccc; padding:10px;">History load ho rahi hai...</p>
+            </ul>
+
+            <h3 style="color: #bbb; margin-top: 20px;">Bookmarks</h3>
+            <ul id="bookmarks-list" style="list-style: none; padding: 0;">
+                <p style="color:#ccc; padding:10px;">Bookmarks load ho rahe hain...</p>
+            </ul>
+        </div>
+        
+        <div style="padding-top: 15px; border-top: 1px solid #555;">
+             <button id="clear-data-btn" style="
+                background-color: #dc3545; 
+                color: white; 
+                border: none; 
+                padding: 10px 20px; 
+                border-radius: 4px; 
+                cursor: pointer;
+            ">
+                🧹 History, Cache aur Temp Files Saaf Karein
+            </button>
+        </div>
+        
+    </div>
+</div>
+    <script src="./renderer.js"></script>
+
+</body>
+</html>
